@@ -60,31 +60,51 @@ export default {
     listingHardLimit: 1000,
     // Metadata for storage system topology
     // A real topology is generated automatically in init.js and saved in
-    // `./${topoFile}.json`
-    topoFile: 'topology',
-    topoMD: [{
-        domain: 'Rack',
-        number: 20,
-        // true -> a component can contain multiple fragments of an object,
-        // false otherwise.
-        replacement: false,
-        // bit range from DISPERSION part representing this domain
-        binImgRange: [0, 6],
-    }, {
-        domain: 'Server',
-        number: 30,
-        replacement: false,
-        binImgRange: [6, 14],
-    }, {
-        domain: 'Drive',
-        number: 50,
-        // drive capacity
-        // number of `[min, max]` -> uniformly random between min and max
-        weight: [0.2, 1.5],
-        replacement: false,
-        binImgRange: [14, 24],
-    }],
-
+    // `./${topology_name}.json`
+    topology: {
+        mem: {
+            name: 'topologyMem',
+            // data placement type of fragments stored in this backend, either
+            //  'none', 'data', 'parity', 'both'
+            dp: 'data',
+            md: [{
+                domain: '',
+                number: 0,
+                weight: 1,
+                replacement: true,
+                binImgRange: [0, 24],
+            }],
+        },
+        file: {
+            name: 'topologyFile',
+            // data placement type of fragments stored in this backend, either
+            //  'none', 'data', 'parity', 'both'
+            dp: 'parity',
+            md: [{
+                domain: 'Rack',
+                number: 20,
+                // true -> a component can contain multiple fragments of an
+                //  object,
+                // false otherwise.
+                replacement: false,
+                // bit range from DISPERSION part representing this domain
+                binImgRange: [0, 6],
+            }, {
+                domain: 'Server',
+                number: 30,
+                replacement: false,
+                binImgRange: [6, 14],
+            }, {
+                domain: 'Drive',
+                number: 50,
+                // drive capacity
+                // number of `[min, max]` -> uniformly random in [min, max)
+                weight: [0.2, 1.5],
+                replacement: false,
+                binImgRange: [14, 24],
+            }],
+        },
+    },
     // AWS sets a minimum size limit for parts except for the last part.
     // http://docs.aws.amazon.com/AmazonS3/latest/API/mpUploadComplete.html
     minimumAllowedPartSize: 5242880,
