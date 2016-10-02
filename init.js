@@ -12,6 +12,46 @@ const logger = require('./lib/utilities/logger.js').logger;
 
 const genTopo = require('./lib/data/dpa/topology').default;
 
+function createTopoFile(topoMD) {
+    // if topology does not exist, create it
+    // otherwise, import it
+    const file = `${__dirname}/${topoMD.name}.json`;
+    let topology;
+    try {
+        fs.statSync(file);
+        // import topology
+        try {
+            const topo = JSON.parse(fs.readFileSync(file));
+            // update weigth distribution
+            topology = genTopo.update(topo, topoMD);
+        } catch (error) {
+            logger.warn('Failed to import topology', { file, error });
+        }
+    } catch (error) {
+        logger.debug('Not found topology file. Create it');
+    }
+
+    if (!topology) {
+        // create topology
+        topology = genTopo.init(topoMD);
+    }
+    // write/update topology into file
+    fs.writeFileSync(file, JSON.stringify(topology, null, 4), 'utf8');
+
+    return topology;
+}
+
+// create topology for data backends
+let topologyFile;
+if (process.env.ENABLE_DP === 'true' && constants.topology) {
+    if (constants.topology.mem) {
+        createTopoFile(constants.topology.mem);
+    }
+    if (constants.topology.file) {
+        topologyFile = createTopoFile(constants.topology.file);
+    }
+}
+
 let ioctl;
 try {
     ioctl = require('ioctl');
@@ -42,7 +82,11 @@ function _setDirSyncFlag(path) {
     fs.closeSync(pathFD2);
 }
 
-if (config.backends.data !== 'file' && config.backends.metadata !== 'file') {
+if (((typeof config.backends.data === 'string' &&
+            config.backends.data !== 'file') ||
+        (Array.isArray(config.backends.data) &&
+            config.backends.data.indexOf('file') === -1)) &&
+    config.backends.metadata !== 'file') {
     logger.info('No init required. Go forth and store data.');
     process.exit(0);
 }
@@ -84,7 +128,8 @@ function createDirsTopo(topo, dataPath, callback) {
     }, callback);
 }
 
-if ((process.env.ENABLE_DP !== 'true') || !constants.topoMD) {
+if ((process.env.ENABLE_DP !== 'true') || !constants.topology ||
+    !constants.topology.file) {
     // Create 3511 subdirectories for the data file backend
     const subDirs = Array.from({ length: constants.folderHash },
         (v, k) => k.toString());
@@ -102,33 +147,8 @@ if ((process.env.ENABLE_DP !== 'true') || !constants.topoMD) {
          logger.info('Init complete.  Go forth and store data.');
      });
 } else {
-    // if topology does not exist, create it
-    // otherwise, import it
-    const file = `${__dirname}/${constants.topoFile}.json`;
-    let topology;
-    try {
-        fs.statSync(file);
-        // import topology
-        try {
-            const topo = JSON.parse(fs.readFileSync(file));
-            // update weigth distribution
-            topology = genTopo.update(topo);
-        } catch (error) {
-            logger.warn('Failed to import topology', { file, error });
-        }
-    } catch (error) {
-        logger.debug('Not found topology file. Create it');
-    }
-
-    if (!topology) {
-        // create topology
-        topology = genTopo.init(constants.topoMD);
-    }
-    // write/update topology into file
-    fs.writeFileSync(file, JSON.stringify(topology, null, 4), 'utf8');
-
     // create directories according to the topology
-    createDirsTopo(topology, dataPath, err => {
+    createDirsTopo(topologyFile, dataPath, err => {
         assert.strictEqual(err, null, `Error creating data files ${err}`);
         logger.info('Init complete.  Go forth and store data.');
     });
