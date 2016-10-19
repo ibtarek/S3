@@ -134,6 +134,24 @@ describe('GET Bucket - AWS.S3.listObjects', () => {
                 .catch(done);
         });
 
+        it('should return multiple common prefixes', done => {
+            const s3 = bucketUtil.s3;
+            const Bucket = bucketName;
+            const objects = [
+                { Bucket, Key: 'testB%' },
+                { Bucket, Key: 'testB%test.json', Body: '{}' },
+                { Bucket, Key: 'testA%' },
+                { Bucket, Key: 'testA%test.json', Body: '{}' },
+                { Bucket, Key: 'testA%test%test.json', Body: '{}' },
+            ];
+
+            Promise
+                .mapSeries(objects, param => s3.putObjectAsync(param))
+                .then(() => s3.listObjectsAsync({ Bucket, Delimiter: '%' }))
+                .then(() => done())
+                .catch(done);
+        });
+
         it('should list object titles with white spaces', done => {
             const s3 = bucketUtil.s3;
             const Bucket = bucketName;
