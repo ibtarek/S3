@@ -6,6 +6,11 @@ import withV4 from '../support/withV4';
 import BucketUtility from '../../lib/utility/bucket-util';
 import bucketSchema from '../../schema/bucket';
 
+function checkNoError(err) {
+    assert.equal(err, null,
+        `Expected success, got error ${JSON.stringify(err)}`);
+}
+
 describe('GET Bucket - AWS.S3.listObjects', () => {
     describe('When user is unauthorized', () => {
         let bucketUtil;
@@ -134,22 +139,29 @@ describe('GET Bucket - AWS.S3.listObjects', () => {
                 .catch(done);
         });
 
-        it('should return multiple common prefixes', done => {
+        it('should list objects with percentage delimiter', () => {
             const s3 = bucketUtil.s3;
             const Bucket = bucketName;
             const objects = [
                 { Bucket, Key: 'testB%' },
-                { Bucket, Key: 'testB%test.json', Body: '{}' },
+                { Bucket, Key: 'testC%test.json', Body: '{}' },
                 { Bucket, Key: 'testA%' },
-                { Bucket, Key: 'testA%test.json', Body: '{}' },
-                { Bucket, Key: 'testA%test%test.json', Body: '{}' },
             ];
 
-            Promise
+            return Promise
                 .mapSeries(objects, param => s3.putObjectAsync(param))
                 .then(() => s3.listObjectsAsync({ Bucket, Delimiter: '%' }))
-                .then(() => done())
-                .catch(done);
+                .then(data => {
+                    const prefixes = data.CommonPrefixes.map(cp => cp.Prefix);
+                    assert.deepEqual(prefixes, [
+                        'testA%',
+                        'testB%',
+                        'testC%',
+                    ], 'Bucket content mismatch');
+                })
+                .catch(err => {
+                    checkNoError(err);
+                });
         });
 
         it('should list object titles with white spaces', done => {
