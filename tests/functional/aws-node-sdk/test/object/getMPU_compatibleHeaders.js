@@ -6,7 +6,7 @@ import BucketUtility from '../../lib/utility/bucket-util';
 const bucket = 'testgetmpubucket';
 const key = 'key';
 
-describe('GET object, multipart upload [Cache-Control, Content-Disposition, ' +
+describe('GET multipart upload object [Cache-Control, Content-Disposition, ' +
 'Content-Encoding, Expires headers]', () => {
     withV4(sigCfg => {
         let bucketUtil;
@@ -30,7 +30,17 @@ describe('GET object, multipart upload [Cache-Control, Content-Disposition, ' +
             };
             bucketUtil = new BucketUtility('default', sigCfg);
             s3 = bucketUtil.s3;
-            return s3.createBucketAsync({ Bucket: bucket })
+            return bucketUtil.empty(bucket)
+            .then(() =>
+                bucketUtil.deleteOne(bucket)
+            )
+            .catch(err => {
+                if (err.code !== 'NoSuchBucket') {
+                    process.stdout.write(`${err}\n`);
+                    throw err;
+                }
+            })
+            .then(s3.createBucketAsync({ Bucket: bucket }))
             .then(() => s3.createMultipartUploadAsync(params))
             .then(res => {
                 uploadId = res.UploadId;
