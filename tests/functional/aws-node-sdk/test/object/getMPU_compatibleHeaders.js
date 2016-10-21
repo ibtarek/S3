@@ -3,8 +3,8 @@ import assert from 'assert';
 import withV4 from '../support/withV4';
 import BucketUtility from '../../lib/utility/bucket-util';
 
-const bucket = 'testgetmpubucket';
-const key = 'key';
+const bucketName = 'testgetmpubucket';
+const objectName = 'key';
 
 describe('GET multipart upload object [Cache-Control, Content-Disposition, ' +
 'Content-Encoding, Expires headers]', () => {
@@ -21,8 +21,8 @@ describe('GET multipart upload object [Cache-Control, Content-Disposition, ' +
 
         before(() => {
             const params = {
-                Bucket: bucket,
-                Key: key,
+                Bucket: bucketName,
+                Key: objectName,
                 CacheControl: cacheControl,
                 ContentDisposition: contentDisposition,
                 ContentEncoding: contentEncoding,
@@ -30,18 +30,25 @@ describe('GET multipart upload object [Cache-Control, Content-Disposition, ' +
             };
             bucketUtil = new BucketUtility('default', sigCfg);
             s3 = bucketUtil.s3;
-            return bucketUtil.empty(bucket)
-            .then(() =>
-                bucketUtil.deleteOne(bucket)
-            )
+            return bucketUtil.empty(bucketName)
+            .then(() => {
+                process.stdout.write('deleting bucket, just in case\n');
+                return bucketUtil.deleteOne(bucketName);
+            })
             .catch(err => {
                 if (err.code !== 'NoSuchBucket') {
                     process.stdout.write(`${err}\n`);
                     throw err;
                 }
             })
-            .then(s3.createBucketAsync({ Bucket: bucket }))
-            .then(() => s3.createMultipartUploadAsync(params))
+            .then(() => {
+                process.stdout.write('creating bucket\n');
+                return s3.createBucketAsync({ Bucket: bucketName });
+            })
+            .then(() => {
+                process.stdout.write('initiating multipart upload\n');
+                return s3.createMultipartUploadAsync(params);
+            })
             .then(res => {
                 uploadId = res.UploadId;
                 return uploadId;
@@ -53,10 +60,10 @@ describe('GET multipart upload object [Cache-Control, Content-Disposition, ' +
         });
         after(() => {
             process.stdout.write('Emptying bucket\n');
-            return bucketUtil.empty(bucket)
+            return bucketUtil.empty(bucketName)
             .then(() => {
                 process.stdout.write('Deleting bucket\n');
-                bucketUtil.deleteOne(bucket);
+                return bucketUtil.deleteOne(bucketName);
             })
             .catch(err => {
                 process.stdout.write('Error in after\n');
@@ -66,7 +73,7 @@ describe('GET multipart upload object [Cache-Control, Content-Disposition, ' +
         it('should return additional headers when get request is performed ' +
         'on MPU, when they are specified in creation of MPU',
         () => {
-            const params = { Bucket: bucket, Key: 'key', PartNumber: 1,
+            const params = { Bucket: bucketName, Key: 'key', PartNumber: 1,
             UploadId: uploadId };
             return s3.uploadPartAsync(params)
             .catch(err => {
@@ -76,8 +83,8 @@ describe('GET multipart upload object [Cache-Control, Content-Disposition, ' +
             .then(res => {
                 process.stdout.write('about to complete multipart upload\n');
                 return s3.completeMultipartUploadAsync({
-                    Bucket: bucket,
-                    Key: key,
+                    Bucket: bucketName,
+                    Key: objectName,
                     UploadId: uploadId,
                     MultipartUpload: {
                         Parts: [
@@ -93,7 +100,7 @@ describe('GET multipart upload object [Cache-Control, Content-Disposition, ' +
             .then(() => {
                 process.stdout.write('about to get object\n');
                 return s3.getObjectAsync({
-                    Bucket: bucket, Key: key,
+                    Bucket: bucketName, Key: objectName,
                 });
             })
             .catch(err => {
