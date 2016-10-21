@@ -301,6 +301,38 @@ describe('putBucketACL API', () => {
         });
     });
 
+    it('should set ACLs with an empty AccessControlList section', done => {
+        const testACLRequest = {
+            bucketName,
+            namespace,
+            headers: { host: `${bucketName}.s3.amazonaws.com` },
+            post: '<AccessControlPolicy xmlns=' +
+                    '"http://s3.amazonaws.com/doc/2006-03-01/">' +
+                  '<Owner>' +
+                    '<ID>852b113e7a2f25102679df27bb0ae12b3f85be6' +
+                    'BucketOwnerCanonicalUserID</ID>' +
+                    '<DisplayName>OwnerDisplayName</DisplayName>' +
+                  '</Owner>' +
+                  '<AccessControlList></AccessControlList>' +
+                '</AccessControlPolicy>',
+            url: '/?acl',
+            query: { acl: '' },
+        };
+
+        bucketPutACL(authInfo, testACLRequest, log, err => {
+            assert.strictEqual(err, undefined);
+            metadata.getBucket(bucketName, log, (err, md) => {
+                assert.strictEqual(md.getAcl().Canned, '');
+                assert.strictEqual(md.getAcl().FULL_CONTROL.length, 0);
+                assert.strictEqual(md.getAcl().READ.length, 0);
+                assert.strictEqual(md.getAcl().WRITE.length, 0);
+                assert.strictEqual(md.getAcl().WRITE_ACP.length, 0);
+                assert.strictEqual(md.getAcl().READ_ACP.length, 0);
+                done();
+            });
+        });
+    });
+
     it('should return an error if invalid email ' +
     'address provided in ACLs set out in request body', done => {
         const testACLRequest = {
