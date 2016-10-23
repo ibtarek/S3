@@ -9,34 +9,39 @@ var Faced = require('faced');
 var faced = new Faced();
 
 const outputPath = __dirname + '/../tmp';
+const facesPath = __dirname + '/../../fun';
+const funnyFaces = []
+
 
 module.exports = function( server ){
 
-
-
-	notification.on('objectPut' , function( request, err ){
+	
+	processInit( (err) => {
+		notification.on('objectPut' , function( request, err ){
 		logger.info('Starting image processing');
-		const fileName = request.objectKey;
-		if (err){
-			//fail
-		} else {
-			logger.info('Processing image %s/%s ' , request.bucketName , request.objectKey );
-			//const log = logger.newRequestLogger(request.objectKey)
-			retrieveObjectData(request,(err,stream) => {
-				if(err){
-					return logger.error('An error occured',err)
-				}
-				logger.info('Retrieved data stream');
-				process(request,stream,logger,()=>{
-					logger.info('done processing image');
+			const fileName = request.objectKey;
+			if (err){
+				//fail
+			} else {
+				logger.info('Processing image %s/%s ' , request.bucketName , request.objectKey );
+				//const log = logger.newRequestLogger(request.objectKey)
+				retrieveObjectData(request,(err,stream) => {
+					if(err){
+						return logger.error('An error occured',err)
+					}
+					logger.info('Retrieved data stream');
+					process(request,stream,logger,(err)=>{
+						if (err) logger.error(err);
+						logger.info('done processing image');
+					})
 				})
-			})
 
-		}
+			}
+		})
+		logger.info('image-processing ready');		
 	})
 
-
-	logger.info('image-processing ready');
+	
 
 }
 
@@ -63,6 +68,30 @@ function retrieveObjectData( request , cb ){
 }
 
 
+function processInit(cb){
+	//init faces
+	fs.readdir(facesPath, ( err , files ) => {
+		if(err){
+			return cb(err);
+		}
+		let barrier = files.length;
+		files = files.map( n => facesPath+'/'+n)
+
+		files.forEach( f => {
+			Jimp.read(f , ( err , image ) => {
+				barrier--;
+				if (err){
+					return cb(err)
+				}
+				funnyFaces.push(image);
+				if(barrier<=0){
+					cb(null)
+				}
+			})
+		})
+	})
+}
+
 
 function process( request , stream , log , cb ){
 	const fileName = request.objectKey;
@@ -72,27 +101,76 @@ function process( request , stream , log , cb ){
 	stream.once('end', () => {
 	    log.info('Making Processed image')
 	    var buffer = Buffer.concat(chunks);
+	    var image = Jimp.read(buffer)
 
 	    faceDetect(buffer, ( err , faces ) => {
+
+	    	log.info('Face detection complete. Found %s faces', faces.length );
+
+	    	image
+	    	.then( image => {
+
+	    		log.info('Loaded image from storage')
+
+	    		const fimg = faces.map( face => {
+	    			log.debug('Sticker for face',face);
+	    			let i = Math.floor(Math.random()*funnyFaces.length)
+	    			return funnyFaces[i]
+	    			.clone()
+	    			.resize(Jimp.AUTO,face.getHeight())
+	    			.scale(1.25)
+	    		})
+
+	    		//run all the transforms
+	    		Promise.all(fimg)
+	    		.then( stickers => {
+	    			log.debug('Done normalizing stickers')
+	    			for( var i = 0 ; i < stickers.length ; i++){
+	    				let face = faces[i];
+	    				log.debug('Adding sticker %s of %s' , i , stickers.length , face.getX(),face.getY() );
+	    				image = image.composite(stickers[i],face.getX()-20,face.getY()-(face.getHeight()/3))
+	    			}
+
+	    			return image;
+	    		})
+	    		.then( image => {
+	    			image
+			        //.quality(60)
+			        .getBuffer(Jimp.MIME_JPEG , (err,buf)=>{
+			            if (err){
+			                return cb(err);
+			            }
+			            log.info('Writing processed image stream ' , buf.length)
+			            //const output = new Stream.PassThrough();
+			            //length = buf.length
+			            output.end(buf , null , (err) => output.emit('processed'));
+			            //output.emit('processed');
+			            
+			            //return cb(null,output)
+			        })
+	    		})
+
+
+	    	} )
+			.catch(cb)
+
+
+			return;
+
+
 	    	Jimp.read(buffer , ( err , image ) => {
 
+	    		faces.forEach( face => {
+	    			let i = Math.floor(Math.random()*funnyFaces.length)
+	    			funnyFaces[i].scaleToFit(Jimp.AUTO,face.getHeight())
+	    			.then( funnyFace => {
+	    				image.composite(funnyFace,face.getX(),face.getY())
+	    			})
 
+	    			//image = image.composite(funnyFaces[i],face.getX(),face.getY())
+	    		} )
 
-		        image
-		        //.quality(60)
-		        .greyscale()
-		        .getBuffer(Jimp.MIME_PNG , (err,buf)=>{
-		            if (err){
-		                return cb(err);
-		            }
-		            log.info('Writing Grayscale image stream ' , buf.length)
-		            //const output = new Stream.PassThrough();
-		            //length = buf.length
-		            output.end(buf , null , (err) => output.emit('processed'));
-		            //output.emit('processed');
-		            
-		            //return cb(null,output)
-		        })
+		        
 		    })
 	    });
 
